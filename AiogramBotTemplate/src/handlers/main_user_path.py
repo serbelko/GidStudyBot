@@ -30,6 +30,8 @@ class UserInfo(StatesGroup):
 @router.message(Command('create'))
 async def sh_lesson(message: types.Message, state: FSMContext):
     
+
+    
     bot_message = await message.answer("📚 Выберите предмет:")
     await state.update_data(bot_message_id=bot_message.message_id)
     await state.set_state(UserInfo.school_lesson)
@@ -82,7 +84,7 @@ async def back_to_school_lesson(callback: CallbackQuery, state: FSMContext):
 async def theme(callback: CallbackQuery, state: FSMContext):
     school_class = callback.data.split("_")[1]
     await state.update_data(school_class=school_class)
-    await callback.message.edit_text(f"👩‍🎓 Вы выбрали {school_class} класс") 
+    await callback.message.edit_text(f"👩‍🎓 Вы выбрали: {school_class} класс") 
     
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text='Назад', callback_data='back_class')]  
@@ -230,7 +232,7 @@ async def description(message: Message, state: FSMContext):
 
     await message.answer(f'✍️ Вы выбрали описание урока: {message.text}')
 
-    await message.answer("Загрука")
+    await message.answer("👁 Загрузка")
 
     text = get_get_gpt_info(subject=data["school_lesson"], 
                         class_int=data["school_class"], 
