@@ -291,7 +291,7 @@ async def finalize_scenario(message: Message, state: FSMContext):
     await message.answer(text)
 
     # Добавляем в БД
-    plan = repo.add_plan(user_id, text=text, label="надо установить")  # label можно тоже формировать
+    plan = repo.add_plan(user_id, text=text, label=f"""{data["school_lesson"]},{data["type_lesson"]}""")  # label можно тоже формировать
     scenario_created_text = get_localized_text(user_id, "scenario_created")
     await message.answer(scenario_created_text)
 

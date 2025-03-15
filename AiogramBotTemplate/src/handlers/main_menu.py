@@ -26,7 +26,6 @@ base_router = Router()
 @base_router.message(CommandStart())
 async def start(message: types.Message, state: FSMContext):
     user_id = str(message.from_user.id)
-
     # Берём текст приветствия для текущего пользователя
     start_text = get_localized_text(user_id, "start_text")
 
@@ -34,7 +33,7 @@ async def start(message: types.Message, state: FSMContext):
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=get_localized_text(user_id, "faq_btn"), callback_data="faq")],
         [InlineKeyboardButton(text=get_localized_text(user_id, "scenarios_btn"), callback_data="scenarios")],
-        [InlineKeyboardButton(text=get_localized_text(user_id, "top_users_btn"), callback_data="top_users")]
+        [InlineKeyboardButton(text="change language", callback_data="change_language")]
     ])
     await message.answer(start_text, reply_markup=markup)
     await state.clear()
@@ -50,11 +49,31 @@ async def set_language(message: Message, state: FSMContext):
     await message.answer(text='choose your language', reply_markup=markup_lang)
 
 
+@base_router.callback_query(F.data =="change_language")
+async def set_language(callback: CallbackQuery, state: FSMContext):
+    markup_lang = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text='Русский', callback_data='set_ru')],
+        [InlineKeyboardButton(text='English', callback_data='set_en')],
+        
+    ])
+    await callback.message.answer(text='choose your language', reply_markup=markup_lang)
+    await callback.answer()
+
+
 @base_router.callback_query(F.data == "set_ru")
 async def put_language(callback: CallbackQuery, state: FSMContext):
     user_id = str(callback.from_user.id)
     language = language_db.add_language(user_id=user_id, language="ru")
-    await callback.message.answer(f"Установлен язык: {language["language"]}")
+    await callback.message.edit_reply_markup(reply_markup=None)
+
+    start_text = get_localized_text(user_id, "start_text")
+    markup = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=get_localized_text(user_id, "faq_btn"), callback_data="faq")],
+        [InlineKeyboardButton(text=get_localized_text(user_id, "scenarios_btn"), callback_data="scenarios")],
+        [InlineKeyboardButton(text="change language", callback_data="change_language")]
+    ])
+    await callback.message.edit_text(start_text, reply_markup=markup)
+    await callback.answer()
     await state.clear()
     
 
@@ -62,7 +81,16 @@ async def put_language(callback: CallbackQuery, state: FSMContext):
 async def put_language(callback: CallbackQuery, state: FSMContext):
     user_id = str(callback.from_user.id)
     language = language_db.add_language(user_id=user_id, language="en")
-    await callback.message.answer(f"Choose language: {language["language"]}")
+    await callback.message.edit_reply_markup(reply_markup=None)
+
+    start_text = get_localized_text(user_id, "start_text")
+    markup = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=get_localized_text(user_id, "faq_btn"), callback_data="faq")],
+        [InlineKeyboardButton(text=get_localized_text(user_id, "scenarios_btn"), callback_data="scenarios")],
+        [InlineKeyboardButton(text="change language", callback_data="change_language")]
+    ])
+    await callback.message.edit_text(start_text, reply_markup=markup)
+    await callback.answer()
     await state.clear()
 
 
@@ -317,7 +345,7 @@ async def back_photo_callback(callback: CallbackQuery, state: FSMContext):
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=get_localized_text(user_id, "faq_btn"), callback_data="faq")],
         [InlineKeyboardButton(text=get_localized_text(user_id, "scenarios_btn"), callback_data="scenarios")],
-        [InlineKeyboardButton(text=get_localized_text(user_id, "top_users_btn"), callback_data='top_users')]
+        [InlineKeyboardButton(text="change language", callback_data="change_language")]
     ])
     await callback.message.delete()
     await callback.message.answer(start_text, reply_markup=markup)
