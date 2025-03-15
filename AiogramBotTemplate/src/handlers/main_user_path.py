@@ -1,18 +1,21 @@
+# create_handlers.py
+
 import asyncio
 import os
 
 from aiogram import Bot, Dispatcher, F, types, Router
 from aiogram.types import Message, CallbackQuery
-from aiogram.types import ReplyKeyboardRemove, \
-    ReplyKeyboardMarkup, KeyboardButton, \
-    InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import Command
 from dotenv import load_dotenv
+
+from src.handlers.strings import get_localized_text
 from src.services.creation_scenario import get_get_gpt_info
 from src.repo.db import PlanRepository
 from config.db_session import SessionLocal
+
 db = SessionLocal()
 repo = PlanRepository(db)
 router = Router()
@@ -26,222 +29,270 @@ class UserInfo(StatesGroup):
     extra_time = State()
     text = State()
 
-
 @router.message(Command('create'))
-async def sh_lesson(message: types.Message, state: FSMContext):
-    
-    bot_message = await message.answer("📚 Выберите предмет:")
+async def start_create_scenario(message: types.Message, state: FSMContext):
+    user_id = str(message.from_user.id)
+    subject_question = get_localized_text(user_id, "subject_question")
+
+    bot_message = await message.answer(subject_question)
     await state.update_data(bot_message_id=bot_message.message_id)
     await state.set_state(UserInfo.school_lesson)
 
-
-
 @router.message(UserInfo.school_lesson)
-async def sc_class(message: Message, state: FSMContext):
+async def choose_class(message: Message, state: FSMContext):
+    user_id = str(message.from_user.id)
     await state.update_data(school_lesson=message.text)
 
-    # Получение данных из состояния
     data = await state.get_data()
     old_bot_message_id = data.get("bot_message_id")
 
+    # Удаляем предыдущие сообщения (по возможности)
     if old_bot_message_id:
         try:
             await message.bot.delete_message(chat_id=message.chat.id, message_id=old_bot_message_id)
         except Exception as e:
             print(f"Ошибка удаления сообщения бота: {e}")
-
     try:
         await message.delete()
     except Exception as e:
         print(f"Ошибка удаления сообщения пользователя: {e}")
 
-    await message.answer(f'📚 Вы выбрали: {message.text}')
+    # Подтверждаем выбор предмета
+    chosen_subject_text = get_localized_text(user_id, "you_chose_subject", subject=message.text)
+    await message.answer(chosen_subject_text)
 
+    # Предлагаем выбрать класс
+    class_question = get_localized_text(user_id, "class_question")
+
+    back_subject_btn = get_localized_text(user_id, "back_subject_btn")
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=str(i), callback_data=f"class_{i}") for i in range(1, 7)],
         [InlineKeyboardButton(text=str(i), callback_data=f"class_{i}") for i in range(7, 12)],
-        [InlineKeyboardButton(text="Назад", callback_data="back_school_lesson")]
+        [InlineKeyboardButton(text=back_subject_btn, callback_data="back_school_lesson")]
     ])
 
-    bot_message = await message.answer("👩‍🎓 Выберите класс:", reply_markup=markup)
+    bot_message = await message.answer(class_question, reply_markup=markup)
     await state.update_data(bot_message_id=bot_message.message_id)
     await state.set_state(UserInfo.school_class)
 
 
 @router.callback_query(F.data == "back_school_lesson")
 async def back_to_school_lesson(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_reply_markup(reply_markup=None) 
-    data = await state.get_data()
-    
-    await callback.message.edit_text("Вы вернулись к выбору предмета.\n📚 Выберите предмет:")
+    user_id = str(callback.from_user.id)
+    subject_question = get_localized_text(user_id, "subject_question")
 
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.message.edit_text(subject_question)
     await state.set_state(UserInfo.school_lesson)
 
 
 @router.callback_query(F.data.startswith("class_"))
-async def theme(callback: CallbackQuery, state: FSMContext):
+async def choose_theme(callback: CallbackQuery, state: FSMContext):
+    user_id = str(callback.from_user.id)
     school_class = callback.data.split("_")[1]
     await state.update_data(school_class=school_class)
-    await callback.message.edit_text(f"👩‍🎓 Вы выбрали {school_class} класс") 
-    
+
+    chosen_class_text = get_localized_text(user_id, "you_chose_class", school_class=school_class)
+    await callback.message.edit_text(chosen_class_text)
+
+    # Кнопка назад
+    back_class_btn = get_localized_text(user_id, "back_class_btn")
+    theme_question = get_localized_text(user_id, "theme_question")
     markup = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text='Назад', callback_data='back_class')]  
+        [InlineKeyboardButton(text=back_class_btn, callback_data='back_class')]
     ])
-    bot_message = await callback.message.answer("💼 Введите тему урока:", reply_markup=markup)
+    bot_message = await callback.message.answer(theme_question, reply_markup=markup)
     await state.update_data(bot_message_id=bot_message.message_id)
     await state.set_state(UserInfo.type_lesson)
 
+
 @router.callback_query(F.data == 'back_class')
 async def back_to_class(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_reply_markup(reply_markup=None) 
-    data = await state.get_data()
+    user_id = str(callback.from_user.id)
+    class_question = get_localized_text(user_id, "class_question")
+    back_subject_btn = get_localized_text(user_id, "back_subject_btn")
+
+    await callback.message.edit_reply_markup(reply_markup=None)
 
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=str(i), callback_data=f"class_{i}") for i in range(1, 7)],
         [InlineKeyboardButton(text=str(i), callback_data=f"class_{i}") for i in range(7, 12)],
-        [InlineKeyboardButton(text="Назад", callback_data="back_school_lesson")]
+        [InlineKeyboardButton(text=back_subject_btn, callback_data="back_school_lesson")]
     ])
-    
-    bot_message = await callback.message.edit_text("Вы вернулись к выбору класса.\n👩‍🎓 Выберите класс:", reply_markup=markup)
-    await state.update_data(bot_message_id=bot_message.message_id)
+    await callback.message.edit_text(class_question, reply_markup=markup)
     await state.set_state(UserInfo.school_class)
 
 
 @router.message(UserInfo.type_lesson)
-async def level(message: Message, state: FSMContext):
+async def choose_level(message: Message, state: FSMContext):
+    user_id = str(message.from_user.id)
     await state.update_data(type_lesson=message.text)
 
     data = await state.get_data()
     old_bot_message_id = data.get("bot_message_id")
-
     if old_bot_message_id:
         try:
             await message.bot.delete_message(chat_id=message.chat.id, message_id=old_bot_message_id)
         except Exception as e:
             print(f"Ошибка удаления сообщения бота: {e}")
-
     try:
         await message.delete()
     except Exception as e:
         print(f"Ошибка удаления сообщения пользователя: {e}")
 
-    await message.answer(f'💼 Вы выбрали тему урока: {message.text}')
+    chosen_theme_text = get_localized_text(user_id, "you_chose_theme", theme=message.text)
+    await message.answer(chosen_theme_text)
+
+    level_question = get_localized_text(user_id, "level_question")
+    level_base_btn = get_localized_text(user_id, "level_base_btn")
+    level_profile_btn = get_localized_text(user_id, "level_profile_btn")
+    back_theme_btn = get_localized_text(user_id, "back_theme_btn")
 
     markup = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="Базовый", callback_data="level_base"),
-     InlineKeyboardButton(text="Профильный", callback_data="level_profiled")],
-    [InlineKeyboardButton(text="Назад", callback_data="back_type")]
+        [InlineKeyboardButton(text=level_base_btn, callback_data="level_base"),
+         InlineKeyboardButton(text=level_profile_btn, callback_data="level_profiled")],
+        [InlineKeyboardButton(text=back_theme_btn, callback_data="back_type")]
     ])
-    await message.answer("👩‍🏫 Выберите уровень подготовки:", reply_markup=markup)
+    await message.answer(level_question, reply_markup=markup)
     await state.set_state(UserInfo.lesson_level)
+
 
 @router.callback_query(F.data == "back_type")
 async def back_to_type(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_reply_markup(reply_markup=None) 
-    data = await state.get_data()
-    bot_message = await callback.message.edit_text("Вы вернулись к выбору темы.\n💼 Выберите тему:")
-    await state.update_data(bot_message_id=bot_message.message_id)
+    user_id = str(callback.from_user.id)
+    theme_question = get_localized_text(user_id, "theme_question")
 
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.message.edit_text(theme_question)
     await state.set_state(UserInfo.type_lesson)
 
 
 @router.callback_query(F.data.startswith("level_"))
-async def extime(callback: CallbackQuery, state: FSMContext):
-    level = "Базовый" if callback.data == "level_base" else "Профильный"
-    await state.update_data(lesson_level=level)
-    await callback.message.edit_text(f"👩‍🏫 Вы выбрали уровень подготовки: {level}") 
-    
-    markup = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text='Назад', callback_data='back_level')]  
-    ])
+async def choose_time(callback: CallbackQuery, state: FSMContext):
+    user_id = str(callback.from_user.id)
+    if callback.data == "level_base":
+        chosen_level = get_localized_text(user_id, "level_base_btn")  # "Базовый" / "Basic"
+    else:
+        chosen_level = get_localized_text(user_id, "level_profile_btn")  # "Профильный" / "Advanced"
 
-    bot_message = await callback.message.answer("🕰 Введите количество времени на урок:",reply_markup=markup)
+    await state.update_data(lesson_level=chosen_level)
+
+    you_chose_level = get_localized_text(user_id, "you_chose_level", level=chosen_level)
+    await callback.message.edit_text(you_chose_level)
+
+    time_question = get_localized_text(user_id, "time_question")
+    back_level_btn = get_localized_text(user_id, "back_level_btn")
+    markup = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=back_level_btn, callback_data='back_level')]
+    ])
+    bot_message = await callback.message.answer(time_question, reply_markup=markup)
     await state.update_data(bot_message_id=bot_message.message_id)
     await state.set_state(UserInfo.extra_time)
 
+
 @router.callback_query(F.data == "back_level")
 async def back_to_level(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_reply_markup(reply_markup=None) 
-    data = await state.get_data()
+    user_id = str(callback.from_user.id)
+    level_question = get_localized_text(user_id, "level_question")
+    level_base_btn = get_localized_text(user_id, "level_base_btn")
+    level_profile_btn = get_localized_text(user_id, "level_profile_btn")
+    back_theme_btn = get_localized_text(user_id, "back_theme_btn")
+
+    await callback.message.edit_reply_markup(reply_markup=None)
 
     markup = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Базовый", callback_data="level_base"),
-        InlineKeyboardButton(text="Профильный", callback_data="level_profiled")],
-        [InlineKeyboardButton(text="Назад", callback_data="back_type")]
+        [InlineKeyboardButton(text=level_base_btn, callback_data="level_base"),
+         InlineKeyboardButton(text=level_profile_btn, callback_data="level_profiled")],
+        [InlineKeyboardButton(text=back_theme_btn, callback_data="back_type")]
     ])
-    bot_message = await callback.message.edit_text("Вы вернулись к выбору уровня.\n👩‍🏫 Выберите уровень подготовки:",reply_markup=markup)
-    await state.update_data(bot_message_id=bot_message.message_id)
+    await callback.message.edit_text(level_question, reply_markup=markup)
     await state.set_state(UserInfo.lesson_level)
 
 
 @router.message(UserInfo.extra_time)
-async def generation(message: Message, state: FSMContext):
+async def choose_desc(message: Message, state: FSMContext):
+    user_id = str(message.from_user.id)
     await state.update_data(extra_time=message.text)
 
     data = await state.get_data()
     old_bot_message_id = data.get("bot_message_id")
-
     if old_bot_message_id:
         try:
             await message.bot.delete_message(chat_id=message.chat.id, message_id=old_bot_message_id)
         except Exception as e:
             print(f"Ошибка удаления сообщения бота: {e}")
-
     try:
         await message.delete()
     except Exception as e:
         print(f"Ошибка удаления сообщения пользователя: {e}")
 
-    markup = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text='Назад', callback_data='back_time')]  
-    ])
-    await message.answer(f'🕰 Вы выбрали количество времени на урок: {message.text}')
+    chosen_time_text = get_localized_text(user_id, "you_chose_time", time=message.text)
+    await message.answer(chosen_time_text)
 
-    bot_message = await message.answer("✍️ Введите описание вашего урока",reply_markup=markup)
+    desc_question = get_localized_text(user_id, "desc_question")
+    back_time_btn = get_localized_text(user_id, "back_time_btn")
+    markup = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=back_time_btn, callback_data='back_time')]
+    ])
+    bot_message = await message.answer(desc_question, reply_markup=markup)
     await state.update_data(bot_message_id=bot_message.message_id)
     await state.set_state(UserInfo.description)
 
-@router.callback_query(F.data == "back_time")
-async def back_to_type(callback: CallbackQuery, state: FSMContext):
-    await callback.message.edit_reply_markup(reply_markup=None) 
-    data = await state.get_data()
-    await callback.message.edit_text("Вы вернулись к выбору времени.\n🕰 Введите количество времени на урок:")
 
-    await state.set_state(UserInfo.extra_time)    
-    
+@router.callback_query(F.data == "back_time")
+async def back_to_time(callback: CallbackQuery, state: FSMContext):
+    user_id = str(callback.from_user.id)
+    time_question = get_localized_text(user_id, "time_question")
+
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.message.edit_text(time_question)
+    await state.set_state(UserInfo.extra_time)
+
 
 @router.message(UserInfo.description)
-async def description(message: Message, state: FSMContext):
+async def finalize_scenario(message: Message, state: FSMContext):
+    user_id = str(message.from_user.id)
     data = await state.update_data(description=message.text)
-
     data = await state.get_data()
-    old_bot_message_id = data.get("bot_message_id")
 
+    old_bot_message_id = data.get("bot_message_id")
     if old_bot_message_id:
         try:
             await message.bot.delete_message(chat_id=message.chat.id, message_id=old_bot_message_id)
         except Exception as e:
             print(f"Ошибка удаления сообщения бота: {e}")
-
     try:
         await message.delete()
     except Exception as e:
         print(f"Ошибка удаления сообщения пользователя: {e}")
 
-    await message.answer(f'✍️ Вы выбрали описание урока: {message.text}')
+    chosen_desc_text = get_localized_text(user_id, "you_chose_desc", desc=message.text)
+    await message.answer(chosen_desc_text)
 
-    await message.answer("Загрука")
+    # "Загрузка..." (процесс генерации)
+    generating_text = get_localized_text(user_id, "scenario_generating")
+    bot_msg = await message.answer(generating_text)
 
-    text = get_get_gpt_info(subject=data["school_lesson"], 
-                        class_int=data["school_class"], 
-                        description=data["description"],
-                        theme=data["type_lesson"], 
-                        hard=data["lesson_level"], 
-                        time_lesson=data["extra_time"], 
-                        tests=False, homework=False)
+    # Генерация сценария
+    text = get_get_gpt_info(
+        subject=data["school_lesson"],
+        class_int=data["school_class"],
+        description=data["description"],
+        theme=data["type_lesson"],
+        hard=data["lesson_level"],
+        time_lesson=data["extra_time"],
+        tests=False,
+        homework=False
+    )
 
+    await bot_msg.delete()
+
+    # Высылаем финальный текст
     await message.answer(text)
-    user_id = message.from_user.id
-    new_user = repo.add_plan(user_id, text=text, label='надо установить')
-    await state.clear()
 
+    # Добавляем в БД
+    plan = repo.add_plan(user_id, text=text, label="надо установить")  # label можно тоже формировать
+    scenario_created_text = get_localized_text(user_id, "scenario_created")
+    await message.answer(scenario_created_text)
+
+    await state.clear()

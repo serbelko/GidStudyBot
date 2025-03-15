@@ -1,1 +1,1 @@
-from .base import Base, PlanORM
+from .base import Base, PlanORM, UserORM

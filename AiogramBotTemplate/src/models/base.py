@@ -24,3 +24,16 @@ class PlanORM(Base):
         }
         return model_dict
     
+
+class UserORM(Base):
+    __tablename__ = "user_table"
+
+    user_id = Column("user_id", String, nullable=False, primary_key=True)
+    language = Column("language", String, nullable=False)
+
+    def to_dict(self) -> Dict:
+        model_dict = {
+            "user_id": str(self.user_id),
+            "language": str(self.language),
+        }
+        return model_dict
