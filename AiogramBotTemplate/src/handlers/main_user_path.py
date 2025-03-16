@@ -13,11 +13,12 @@ from dotenv import load_dotenv
 
 from src.handlers.strings import get_localized_text
 from src.services.creation_scenario import get_get_gpt_info
-from src.repo.db import PlanRepository
+from src.repo.db import PlanRepository, UserRepository
 from config.db_session import SessionLocal
 
 db = SessionLocal()
 repo = PlanRepository(db)
+language_db = UserRepository(db)
 router = Router()
 
 class UserInfo(StatesGroup):
@@ -271,6 +272,8 @@ async def finalize_scenario(message: Message, state: FSMContext):
 
     # "Загрузка..." (процесс генерации)
     generating_text = get_localized_text(user_id, "scenario_generating")
+    user_id = str(message.from_user.id)
+    language = language_db.get_language_by_id(user_id)
     bot_msg = await message.answer(generating_text)
 
     # Генерация сценария
@@ -282,7 +285,8 @@ async def finalize_scenario(message: Message, state: FSMContext):
         hard=data["lesson_level"],
         time_lesson=data["extra_time"],
         tests=False,
-        homework=False
+        homework=False,
+        language = language
     )
 
     await bot_msg.delete()
